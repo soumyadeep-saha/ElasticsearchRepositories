@@ -1,0 +1,583 @@
+https://www.javacodegeeks.com/2015/03/head-first-elastic-search-on-java-with-spring-boot-and-data-features.html
+Head first elastic search on java with spring boot and data features
+Posted by: Sezin Karli  in Enterprise Java March 4th, 2015 20 Comments 815 Views
+
+
+In this article I’ll try to give you an easy introduction on how to use Elastic Search in a Java project. As Spring Boot is the easiest and fastest way to begin our project I choose to use it. Futhermore, we will heavily use Repository goodies of beloved Spring Data.
+
+Let’s begin by installing Elastic Search on our machine and run our elastic server for the first time.
+
+I go to elastic-folder\bin and run elasticsearch.bat (yeah I’m using Windows) but no luck. I get this:
+ 
+ 
+elastic-vm
+
+“Error occurred during initialization of VM
+Could not reserve enough space for object heap
+Error: Could not create the Java Virtual Machine.
+Error: A fatal exception has occurred. Program will exit.”
+
+What a great start!
+
+In my bin folder there’s a “elasticsearch.in.bat” file. I set ES_MAX_MEM=1g to ES_MAX_MEM=512mb and voila it is fixed.
+
+I start a new server without problem after that.
+
+Now it is time to define the document we will index in elastic search. Assume we have movie information to index. Our model is quite straightforward. Movie has a name, rating and a genre in it. I chose “elastic_sample” as index name which sounds good as a database name and “movie” as type which is good for a table name if we think in relational database terms. Nothing fancy in the model as you can see.
+
+01
+@Document(indexName = "elastic_sample", type = "movie")
+02
+public class Movie {
+03
+ 
+04
+    @Id
+05
+    private String id;
+06
+ 
+07
+    private String name;
+08
+ 
+09
+    @Field(type = FieldType.Nested)
+10
+    private List < Genre >  genre;
+11
+ 
+12
+    private Double rating;
+13
+ 
+14
+    public Double getRating() {
+15
+        return rating;
+16
+    }
+17
+ 
+18
+    public void setRating(Double rating) {
+19
+        this.rating = rating;
+20
+    }
+21
+ 
+22
+    public void setId(String id) {
+23
+        this.id = id;
+24
+    }
+25
+ 
+26
+    public List < Genre >  getGenre() {
+27
+        return genre;
+28
+    }
+29
+ 
+30
+    public void setGenre(List < Genre >  genre) {
+31
+        this.genre = genre;
+32
+    }
+33
+ 
+34
+    public String getId() {
+35
+        return id;
+36
+    }
+37
+ 
+38
+    public String getName() {
+39
+        return name;
+40
+ 
+41
+    }
+42
+ 
+43
+    public void setName(String name) {
+44
+        this.name = name;
+45
+    }
+46
+ 
+47
+    @Override
+48
+    public String toString() {
+49
+        return "Movie{" +
+50
+                "id=" + id +
+51
+                ", name='" + name + '\'' +
+52
+                ", genre=" + genre +
+53
+                ", rating=" + rating +
+54
+                '}';
+55
+    }
+56
+}
+For those who wonder what Genre is here is it. Just a POJO.
+
+01
+public class Genre {
+02
+    private String name;
+03
+ 
+04
+    public Genre() {
+05
+    }
+06
+ 
+07
+    public Genre(String name) {
+08
+        this.name = name;
+09
+    }
+10
+ 
+11
+    public String getName() {
+12
+        return name;
+13
+    }
+14
+ 
+15
+    @Override
+16
+    public String toString() {
+17
+        return "Genre{" +
+18
+                "name='" + name + '\'' +
+19
+                '}';
+20
+    }
+21
+ 
+22
+    public void setName(String name) {
+23
+        this.name = name;
+24
+    }
+25
+}
+Not it is time to create DAO layer so we can save and load our document to/from our elastic search server. Our Repository extends the classic ElasticserchRepository (no idea why it is search and not Search). As you probably know Spring Data can query one or more fields with these predefined methods where we use our field names. findByName will search in the name field, findByRating will search in the rating field so on so forth. Furthermore thanks to Spring Data we don’t need to write implementation for it, we just put method names in the interface and that’s finished.
+
+1
+public interface MovieRepository extends ElasticsearchRepository < Movie, Long > {
+2
+    public List < Movie >  findByName(String name);
+3
+ 
+4
+    public List < Movie>  findByRatingBetween(Double beginning, Double end);
+5
+}
+Our DAO layer will be called by a Service layer:
+
+01
+@Service
+02
+public class MovieService {
+03
+ 
+04
+    @Autowired
+05
+    private MovieRepository repository;
+06
+ 
+07
+    public List < Movie >  getByName(String name) {
+08
+        return repository.findByName(name);
+09
+    }
+10
+ 
+11
+    public List < Movie >  getByRatingInterval(Double beginning, Double end) {
+12
+        return repository.findByRatingBetween(beginning, end);
+13
+    }
+14
+ 
+15
+    public void addMovie(Movie movie) {
+16
+        repository.save(movie);
+17
+    }
+18
+}
+Here is the main Class we will use to run our application. EnableAutoConfiguration will auto-configure everything it recognizes under our classpath. ComponentScan will scan for Spring annotations under the main Class’ directory.
+
+01
+@Configuration
+02
+@EnableAutoConfiguration
+03
+@ComponentScan
+04
+public class BootElastic implements CommandLineRunner {
+05
+ 
+06
+    @Autowired
+07
+    private MovieService movieService;
+08
+ 
+09
+    private static final Logger logger = LoggerFactory.getLogger(BootElastic.class);
+10
+ 
+11
+// add star wars and
+12
+// princess bride as a movie
+13
+// to elastic search
+14
+    private void addSomeMovies() {
+15
+        Movie starWars = getFirstMovie();
+16
+        movieService.addMovie(starWars);
+17
+ 
+18
+        Movie princessBride = getSecondMovie();
+19
+        movieService.addMovie(princessBride);
+20
+    }
+21
+ 
+22
+    private Movie getSecondMovie() {
+23
+        Movie secondMovie = new Movie();
+24
+        secondMovie.setId("2");
+25
+        secondMovie.setRating(8.4d);
+26
+        secondMovie.setName("The Princess Bride");
+27
+ 
+28
+        List < Genre >  princessPrideGenre = new ArrayList < Genre >();
+29
+        princessPrideGenre.add(new Genre("ACTION"));
+30
+        princessPrideGenre.add(new Genre("ROMANCE"));
+31
+        secondMovie.setGenre(princessPrideGenre);
+32
+ 
+33
+        return secondMovie;
+34
+    }
+35
+ 
+36
+ 
+37
+    private Movie getFirstMovie() {
+38
+        Movie firstMovie = new Movie();
+39
+        firstMovie.setId("1");
+40
+        firstMovie.setRating(9.6d);
+41
+        firstMovie.setName("Star Wars");
+42
+ 
+43
+        List < Genre >  starWarsGenre = new ArrayList < Genre >();
+44
+        starWarsGenre.add(new Genre("ACTION"));
+45
+        starWarsGenre.add(new Genre("SCI_FI"));
+46
+        firstMovie.setGenre(starWarsGenre);
+47
+ 
+48
+        return firstMovie;
+49
+    }
+50
+ 
+51
+    public void run(String... args) throws Exception {
+52
+        addSomeMovies();
+53
+        // We indexed star wars and pricess bride to our movie
+54
+        // listing in elastic search
+55
+ 
+56
+        //Lets query if we have a movie with Star Wars as name
+57
+        List < Movie > starWarsNameQuery = movieService.getByName("Star Wars");
+58
+        logger.info("Content of star wars name query is {}", starWarsNameQuery);
+59
+ 
+60
+        //Lets query if we have a movie with The Princess Bride as name
+61
+        List < Movie >  brideQuery = movieService.getByName("The Princess Bride");
+62
+        logger.info("Content of princess bride name query is {}", brideQuery);
+63
+ 
+64
+ 
+65
+        //Lets query if we have a movie with rating between 6 and 9
+66
+        List < Movie >  byRatingInterval = movieService.getByRatingInterval(6d, 9d);
+67
+        logger.info("Content of Rating Interval query is {}", byRatingInterval);
+68
+    }
+69
+ 
+70
+    public static void main(String[] args) throws Exception {
+71
+        SpringApplication.run(BootElastic.class, args);
+72
+    }
+73
+}
+If we run it the result is:
+
+1
+015-02-28 18:26:12.368  INFO 3616 --- [           main] main.BootElastic: Content of star wars name query is [Movie{id=1, name='Star Wars', genre=[Genre{name='ACTION'}, Genre{name='SCI_FI'}], rating=9.6}]
+2
+2015-02-28 18:26:12.373  INFO 3616 --- [           main] main.BootElastic: Content of princess bride name query is [Movie{id=2, name='The Princess Bride', genre=[Genre{name='ACTION'}, Genre{name='ROMANCE'}], rating=8.4}]
+3
+2015-02-28 18:26:12.384  INFO 3616 --- [           main] main.BootElastic: Content of Rating Interval query is [Movie{id=2, name='The Princess Bride', genre=[Genre{name='ACTION'}, Genre{name='ROMANCE'}], rating=8.4}]
+As you can see the interval query only retrieved Princess Bride. We did not do any configuration right? It is unusual. I have to share the huge configuration file with you:
+
+1
+spring.data.elasticsearch.cluster-nodes=localhost:9300
+2
+ # if spring data repository support is enabled
+3
+spring.data.elasticsearch.repositories.enabled=true
+Normally you would use port 9200 when you query your elastic server. But when we programmatically reach it we are using 9300. If you have more than one node you would separate them with a comma and use 9301, 9302 etc as port numbers. Our pom file is no surprise either. Just elastic starter pom and we are set to go.
+
+01
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemalocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+02
+    <modelversion>4.0.0</modelversion>
+03
+ 
+04
+    <groupid>caught.co.nr</groupid>
+05
+    <artifactid>boot-elastic-sample</artifactid>
+06
+    <version>1.0-SNAPSHOT</version>
+07
+    <packaging>war</packaging>
+08
+ 
+09
+    <!-- Inherit defaults from Spring Boot -->
+10
+    <parent>
+11
+        <groupid>org.springframework.boot</groupid>
+12
+        <artifactid>spring-boot-starter-parent</artifactid>
+13
+        <version>1.2.2.RELEASE</version>
+14
+    </parent>
+15
+ 
+16
+    <dependencies>
+17
+        <dependency>
+18
+            <groupid>org.springframework.boot</groupid>
+19
+            <artifactid>spring-boot-starter-data-elasticsearch</artifactid>
+20
+        </dependency>
+21
+ 
+22
+    </dependencies>
+23
+ 
+24
+    <!-- Needed for fat jar -->
+25
+    <build>
+26
+        <plugins>
+27
+            <plugin>
+28
+                <groupid>org.springframework.boot</groupid>
+29
+                <artifactid>spring-boot-maven-plugin</artifactid>
+30
+            </plugin>
+31
+        </plugins>
+32
+    </build>
+33
+</project>
+As you can see thanks to Spring Boot and Data it is quite easy to work with elastic search. Lets check what we indexed from the server api as well. I’ll use Sense -a chrome plug-in for elastic commands-.
+
+elastic-sense-movie-search
+
+Here’s the result json:
+
+01
+{
+02
+   "took": 2,
+03
+   "timed_out": false,
+04
+   "_shards": {
+05
+      "total": 1,
+06
+      "successful": 1,
+07
+      "failed": 0
+08
+   },
+09
+   "hits": {
+10
+      "total": 2,
+11
+      "max_score": 1,
+12
+      "hits": [
+13
+         {
+14
+            "_index": "elastic_sample",
+15
+            "_type": "movie",
+16
+            "_id": "1",
+17
+            "_score": 1,
+18
+            "_source": {
+19
+               "id": 1,
+20
+               "name": "Star Wars",
+21
+               "genre": [
+22
+                  {
+23
+                     "name": "ACTION"
+24
+                  },
+25
+                  {
+26
+                     "name": "SCI_FI"
+27
+                  }
+28
+               ]
+29
+            }
+30
+         },
+31
+         {
+32
+            "_index": "elastic_sample",
+33
+            "_type": "movie",
+34
+            "_id": "2",
+35
+            "_score": 1,
+36
+            "_source": {
+37
+               "id": 2,
+38
+               "name": "The Princess Bride",
+39
+               "genre": [
+40
+                  {
+41
+                     "name": "ACTION"
+42
+                  },
+43
+                  {
+44
+                     "name": "ROMANCE"
+45
+                  }
+46
+               ]
+47
+            }
+48
+         }
+49
+      ]
+50
+   }
+51
+}
+You can check out the whole project in the github.
+Reference:	Head first elastic search on java with spring boot and data features from our JCG partner Sezin Karli at the caught Somewhere In Time = true; blog.

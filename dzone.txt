@@ -1,0 +1,178 @@
+https://dzone.com/articles/first-step-spring-boot-and
+
+First Step with Spring Boot and Elasticsearch
+
+Join the DZone community and get the full member experience. JOIN FOR FREE
+SnapLogic is the leading self-service enterprise-grade integration platform. Download the 2018 GartnerMagic Quadrant for Enterprise iPaaS or play around on the platform, risk free, for 30 days.
+We often use Elasticsearch to improve performance in our application, especially searching and caching, to make our application scale and adapt in real-time.
+
+Elasticsearch is a flexible and powerful open source, distributed, real-time search and analytics engine. In this article, I would like to introduce how to use Elasticsearch in java applications: by using Spring Boot data Elasticsearch. Spring Boot now easy and powerful, and we can build fast Java and web applications with a simple configuration.
+
+By following the steps below, you can start writing your first application.
+
+Source code: https://github.com/herotl2005/spring-data-elasticsearch-sample
+
+Requirement enviroment
+
+1. Install Elasticsearch
+
+2. Install Gradle
+
+3. IDE Eclipse or Intellij  IDEA
+
+Step by Step Coding
+
+1. Gradle build 
+
+dependencies {
+testCompile group: 'junit', name: 'junit', version: '4.11'
+compile 'org.springframework.boot:spring-boot-starter-data-elasticsearch:1.2.0.RELEASE'
+compile 'org.springframework.data:spring-data-cassandra:1.1.1.RELEASE'
+compile 'org.springframework:spring-test:4.1.2.RELEASE'
+compile 'org.springframework.boot:spring-boot-starter-logging:1.2.0.RELEASE'
+compile 'org.springframework.boot:spring-boot-starter-web:1.2.0.RELEASE'
+compile 'org.springframework.boot:spring-boot-starter-actuator:1.2.0.RELEASE'
+}
+2. Elasticsearch configuration
+
+@Configuration@PropertySource(value = "classpath:elasticsearch.properties")
+@EnableElasticsearchRepositories(basePackages = "co.paan.repository")
+public class ElasticsearchConfiguration {
+    @Resource
+private Environment environment;
+@Bean
+public Client client() {
+        TransportClient client = new TransportClient();
+TransportAddress address = new InetSocketTransportAddress(environment.getProperty("elasticsearch.host"), Integer.parseInt(environment.getProperty("elasticsearch.port")));
+client.addTransportAddress(address);        
+return client;
+}
+
+    @Beanpublic ElasticsearchOperations elasticsearchTemplate() {
+        return new ElasticsearchTemplate(client());
+     }
+}
+
+
+You put elasticsearch host and post in your application properties file.
+
+elasticsearch.host = localhost
+ # if you use you local elasticsearch host
+elasticsearch.port = 9300
+
+
+3. Data mapping object: 
+
+In this application, we have 2 entities data object mapping: Post and Tag
+
+@Document(indexName = "post", type = "post", shards = 1, replicas = 0)
+public class Post {
+@Idprivate String id;    private String title;// 
+@Field(type= FieldType.Nested)
+private List<Tag> tags;   
+ public String getId() {
+        return id;
+}
+
+    public void setId(String id) {
+        this.id = id;
+}
+
+    public String getTitle() {
+        return title;
+}
+
+    public void setTitle(String title) {
+        this.title = title;
+}
+
+    public List<Tag> getTags() {
+        return tags;
+}
+
+    public void setTags(List<Tag> tags) {
+        this.tags = tags;}
+}
+
+
+public class Tag {
+ private String id;   
+ private String name;   
+ public String getId() {
+        return id;
+    }
+    public void setId(String id) {
+        this.id = id;
+    }
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+  }
+}
+4. Repository: we extends from ElasticsearchRepository
+
+public interface PostRepository extends ElasticsearchRepository<Post, String>{
+
+    Page<Post> findByTagsName(String name, Pageable pageable);
+}
+
+
+5. Data access service
+
+public interface PostService {
+    Post save(Post post);
+    Post findOne(String id);
+    Iterable<Post> findAll();
+    Page<Post> findByTagsName(String tagName, PageRequest pageRequest);
+}
+
+
+@Servicepublic class PostServiceImpl implements PostService{
+    @Autowired
+private PostRepository postRepository;
+@Override
+public Post save(Post post) {
+        postRepository.save(post);        
+
+              return post;
+       }
+
+    @Overridepublic Post findOne(String id) {
+        return postRepository.findOne(id);
+   }
+
+    @Overridepublic Iterable<Post> findAll() {
+        return postRepository.findAll();
+   }
+
+    @Overridepublic Page<Post> findByTagsName(String tagName, PageRequest pageRequest) {
+        return postRepository.findByTagsName(tagName, pageRequest);
+   }
+}
+6. Testing and the result
+
+@Testpublic void testFindByTagsName() throws Exception {
+Tag tag = new Tag();
+tag.setId("1");
+tag.setName("tech");
+Tag tag2 = new Tag();
+tag2.setId("2");
+tag2.setName("elasticsearch");
+Post post = new Post();
+post.setId("1");
+post.setTitle("Bigining with spring boot application and elasticsearch");
+post.setTags(Arrays.asList(tag, tag2));
+postService.save(post);
+Post post2 = new Post();
+post2.setId("1");
+post2.setTitle("Bigining with spring boot application");
+post2.setTags(Arrays.asList(tag));
+postService.save(post);
+Page<Post> posts  = postService.findByTagsName("tech", new PageRequest(0,10));Page<Post> posts2  = postService.findByTagsName("tech", new PageRequest(0,10));Page<Post> posts3  = postService.findByTagsName("maz", new PageRequest(0,10));assertThat(posts.getTotalElements(), is(1L));
+assertThat(posts2.getTotalElements(), is(1L));
+assertThat(posts3.getTotalElements(), is(0L));
+}
+7. You can find detail project at github: https://github.com/herotl2005/spring-data-elasticsearch-sample

@@ -1,0 +1,628 @@
+https://www.mkyong.com/spring-boot/spring-boot-spring-data-elasticsearch-example/
+
+Download Source Code
+http://www.mkyong.com/wp-content/uploads/2017/03/springboot-elasticsearch-example.zip
+
+Spring Data 					Elasticsearch 									Spring Boot version 				matrix
+Spring Boot Version (x)			Spring Data Elasticsearch Version (y)			Elasticsearch Version (z)
+x <= 1.3.5						y <= 1.3.4										z <= 1.7.2*
+x >= 1.4.x						2.0.0 <=y < 5.0.0**								2.0.0 <= z < 5.0.0**
+(*) - require manual change in your project pom file (solution 2.)
+(**) - Next big ES release with breaking changes
+
+In this article, we will discuss about “How to create a Spring Boot + Spring Data + Elasticsearch Example”.
+
+Tools used in this article :
+
+Spring Boot 1.5.1.RELEASE
+Spring Boot Starter Data Elasticsearch 1.5.1.RELEASE
+Spring Data Elasticsearch 2.10.RELEASE
+Elasticsearch 2.4.4
+Maven
+Java 8
+
+Note
+SpringBoot 1.5.1.RELEASE and Spring Data Elasticsearch 2.10.RELEASE supports only ElasticSearch 2.4.0. They don’t support the latest version of ElasticSearch 5.x version. Read this – Spring Data Elasticsearch Spring Boot version matrix
+
+1. Project Structure
+A standard Maven project structure.
+
+2. Project Dependency
+Declares a spring-boot-starter-data-elasticsearch for Spring Data ElasticSearch application.
+
+pom.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>springboot-springdata-elasticsearch-example</artifactId>
+    <packaging>jar</packaging>
+    <url>https://www.mkyong.com</url>
+    <version>1.0</version>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>1.5.1.RELEASE</version>
+    </parent>
+
+    <properties>
+        <java.version>1.8</java.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Runtime, for Embedded Elasticsearch,
+            comment this if connect to external elastic search server-->
+        <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Package as an executable jar/war -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+    
+</project>
+
+Review the project dependencies :
+Terminal
+$ mvn dependency:tree
+
+[INFO] Scanning for projects...
+[INFO]
+[INFO] ------------------------------------------------------------------------
+[INFO] Building springboot-springdata-elasticsearch-example 1.0
+[INFO] ------------------------------------------------------------------------
+[INFO]
+[INFO] --- maven-dependency-plugin:2.10:tree (default-cli) @ springboot-springdata-elasticsearch-example ---
+[INFO] org.springframework.boot:springboot-springdata-elasticsearch-example:jar:1.0
+[INFO] +- org.springframework.boot:spring-boot-starter-data-elasticsearch:jar:1.5.1.RELEASE:compile
+[INFO] |  +- org.springframework.boot:spring-boot-starter:jar:1.5.1.RELEASE:compile
+[INFO] |  |  +- org.springframework.boot:spring-boot:jar:1.5.1.RELEASE:compile
+[INFO] |  |  +- org.springframework.boot:spring-boot-autoconfigure:jar:1.5.1.RELEASE:compile
+[INFO] |  |  +- org.springframework.boot:spring-boot-starter-logging:jar:1.5.1.RELEASE:compile
+[INFO] |  |  |  +- ch.qos.logback:logback-classic:jar:1.1.9:compile
+............
+
+3. Spring Data ElasticSearch Application
+Let us start Spring Boot + Spring Data + Elasticsearch Example now.
+
+3.1. Develop Model for our project
+
+Book.java
+package com.mkyong.book.model;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.elasticsearch.annotations.Document;
+
+@Document(indexName = "mkyong", type = "books")
+public class Book {
+
+    @Id
+    private String id;
+    private String title;
+    private String author;
+    private String releaseDate;
+
+    public Book() {
+    }
+
+    public Book(String id, String title, String author, String releaseDate) {
+        this.id = id;
+        this.title = title;
+        this.author = author;
+        this.releaseDate = releaseDate;
+    }
+
+    //getters and setters
+
+    @Override
+    public String toString() {
+        return "Book{" +
+                "id='" + id + '\'' +
+                ", title='" + title + '\'' +
+                ", author='" + author + '\'' +
+                ", releaseDate='" + releaseDate + '\'' +
+                '}';
+    }
+}
+
+3.2. Develop Elasticsearch Repository for our project
+
+BookRepository.java
+package com.mkyong.book.repository;
+
+import com.mkyong.book.model.Book;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.elasticsearch.repository.ElasticsearchRepository;
+
+import java.util.List;
+
+public interface BookRepository extends ElasticsearchRepository<Book, String> {
+
+    Page<Book> findByAuthor(String author, Pageable pageable);
+
+    List<Book> findByTitle(String title);
+
+}
+
+3.3. Develop Service component for our project
+
+BookService.java
+package com.mkyong.book.service;
+
+import com.mkyong.book.model.Book;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+
+import java.util.List;
+
+public interface BookService {
+
+    Book save(Book book);
+
+    void delete(Book book);
+
+    Book findOne(String id);
+
+    Iterable<Book> findAll();
+
+    Page<Book> findByAuthor(String author, PageRequest pageRequest);
+
+    List<Book> findByTitle(String title);
+
+}
+
+BookServiceImpl.java
+package com.mkyong.book.service;
+
+import com.mkyong.book.model.Book;
+import com.mkyong.book.repository.BookRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class BookServiceImpl implements BookService {
+
+    private BookRepository bookRepository;
+
+	@Autowired
+    public void setBookRepository(BookRepository bookRepository) {
+        this.bookRepository = bookRepository;
+    }
+
+	
+    public Book save(Book book) {
+        return bookRepository.save(book);
+    }
+
+    public void delete(Book book) {
+        bookRepository.delete(book);
+    }
+
+    public Book findOne(String id) {
+        return bookRepository.findOne(id);
+    }
+
+    public Iterable<Book> findAll() {
+        return bookRepository.findAll();
+    }
+
+    public Page<Book> findByAuthor(String author, PageRequest pageRequest) {
+        return bookRepository.findByAuthor(author, pageRequest);
+    }
+
+    public List<Book> findByTitle(String title) {
+        return bookRepository.findByTitle(title);
+    }
+
+}
+
+3.4. Develop application.properties with Elasticsearch properties.
+
+application.properties
+elasticsearch.clustername = mkyong-cluster
+elasticsearch.host = localhost
+elasticsearch.port = 9300
+
+#
+# Home directory of the embedded Elasticsearch instance. Default to the
+# current working directory.
+#
+#spring.data.elasticsearch.properties.path.home=target/elastic-embedded
+#spring.data.elasticsearch.properties.transport.tcp.connect_timeout=60s
+
+3.5. Develop SpringBoot Configuration. Connect to Elastic Search cluster via TransportClient
+
+MkyongElasticsearchConfiguration.java
+package com.mkyong;
+
+import org.elasticsearch.client.Client;
+import org.elasticsearch.client.transport.TransportClient;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.transport.InetSocketTransportAddress;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.ElasticsearchTemplate;
+import org.springframework.data.elasticsearch.repository.config.EnableElasticsearchRepositories;
+
+import java.net.InetAddress;
+
+@Configuration
+@EnableElasticsearchRepositories(basePackages = "com.mkyong.book.repository")
+public class EsConfig {
+
+    @Value("${elasticsearch.host}")
+    private String EsHost;
+
+    @Value("${elasticsearch.port}")
+    private int EsPort;
+
+    @Value("${elasticsearch.clustername}")
+    private String EsClusterName;
+
+    @Bean
+    public Client client() throws Exception {
+
+        Settings esSettings = Settings.settingsBuilder()
+                .put("cluster.name", EsClusterName)
+                .build();
+
+        //https://www.elastic.co/guide/en/elasticsearch/guide/current/_transport_client_versus_node_client.html
+        return TransportClient.builder()
+                .settings(esSettings)
+                .build()
+                .addTransportAddress(
+				  new InetSocketTransportAddress(InetAddress.getByName(EsHost), EsPort));
+    }
+
+    @Bean
+    public ElasticsearchOperations elasticsearchTemplate() throws Exception {
+        return new ElasticsearchTemplate(client());
+    }
+
+    //Embedded Elasticsearch Server
+    /*@Bean
+    public ElasticsearchOperations elasticsearchTemplate() {
+        return new ElasticsearchTemplate(nodeBuilder().local(true).node().client());
+    }*/
+
+}
+
+4. Develop Test Application
+Let us develop one Test Application to unit test our code.
+
+BookServiceTest.java
+package com.mkyong;
+
+import com.mkyong.book.model.Book;
+import com.mkyong.book.service.BookService;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.elasticsearch.core.ElasticsearchTemplate;
+import org.springframework.test.context.junit4.SpringRunner;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.Assert.*;
+
+@RunWith(SpringRunner.class)
+@SpringBootTest(classes = Application.class)
+public class BookServiceTest {
+
+    @Autowired
+    private BookService bookService;
+
+    @Autowired
+    private ElasticsearchTemplate esTemplate;
+
+    @Before
+    public void before() {
+        esTemplate.deleteIndex(Book.class);
+        esTemplate.createIndex(Book.class);
+        esTemplate.putMapping(Book.class);
+        esTemplate.refresh(Book.class);
+    }
+
+    @Test
+    public void testSave() {
+
+        Book book = new Book("1001", "Elasticsearch Basics", "Rambabu Posa", "23-FEB-2017");
+        Book testBook = bookService.save(book);
+
+        assertNotNull(testBook.getId());
+        assertEquals(testBook.getTitle(), book.getTitle());
+        assertEquals(testBook.getAuthor(), book.getAuthor());
+        assertEquals(testBook.getReleaseDate(), book.getReleaseDate());
+
+    }
+
+    @Test
+    public void testFindOne() {
+
+        Book book = new Book("1001", "Elasticsearch Basics", "Rambabu Posa", "23-FEB-2017");
+        bookService.save(book);
+
+        Book testBook = bookService.findOne(book.getId());
+
+        assertNotNull(testBook.getId());
+        assertEquals(testBook.getTitle(), book.getTitle());
+        assertEquals(testBook.getAuthor(), book.getAuthor());
+        assertEquals(testBook.getReleaseDate(), book.getReleaseDate());
+
+    }
+
+    @Test
+    public void testFindByTitle() {
+
+        Book book = new Book("1001", "Elasticsearch Basics", "Rambabu Posa", "23-FEB-2017");
+        bookService.save(book);
+
+        List<Book> byTitle = bookService.findByTitle(book.getTitle());
+        assertThat(byTitle.size(), is(1));
+    }
+
+    @Test
+    public void testFindByAuthor() {
+
+        List<Book> bookList = new ArrayList<>();
+
+        bookList.add(new Book("1001", "Elasticsearch Basics", "Rambabu Posa", "23-FEB-2017"));
+        bookList.add(new Book("1002", "Apache Lucene Basics", "Rambabu Posa", "13-MAR-2017"));
+        bookList.add(new Book("1003", "Apache Solr Basics", "Rambabu Posa", "21-MAR-2017"));
+        bookList.add(new Book("1007", "Spring Data + ElasticSearch", "Rambabu Posa", "01-APR-2017"));
+        bookList.add(new Book("1008", "Spring Boot + MongoDB", "Mkyong", "25-FEB-2017"));
+
+        for (Book book : bookList) {
+            bookService.save(book);
+        }
+
+        Page<Book> byAuthor = bookService.findByAuthor("Rambabu Posa", new PageRequest(0, 10));
+        assertThat(byAuthor.getTotalElements(), is(4L));
+
+        Page<Book> byAuthor2 = bookService.findByAuthor("Mkyong", new PageRequest(0, 10));
+        assertThat(byAuthor2.getTotalElements(), is(1L));
+
+    }
+
+    @Test
+    public void testDelete() {
+
+        Book book = new Book("1001", "Elasticsearch Basics", "Rambabu Posa", "23-FEB-2017");
+        bookService.save(book);
+        bookService.delete(book);
+        Book testBook = bookService.findOne(book.getId());
+        assertNull(testBook);
+    }
+
+}
+Copy
+5. Run Spring Boot Application
+5.1 To run this demo, we should follow this steps
+
+Prerequisite-1: Install Java and set JAVA_HOME and PATH variables.
+Prerequisite-2: Install Maven.
+Prerequisite-3: Install Elasticsearch 2.4.0
+Let us assume ELASTICSEARCH_HOME = C:\elasticsearch-2.4.0
+Prerequisite-4: Configure ElasticSearch Cluster
+Open ${ELASTICSEARCH_HOME}\config\elasticsearch.yml and add the following configuration
+${ELASTICSEARCH_HOME}\config\elasticsearch.yml
+cluster.name: mkyong-cluster
+Copy
+Prerequisite-5: Start Elasticsearch Instance
+
+5.2 Run Spring Boot Application, it will insert 3 book objects into Elastic Server.
+
+Application.java
+package com.mkyong;
+
+import com.mkyong.book.model.Book;
+import com.mkyong.book.service.BookService;
+import org.elasticsearch.client.Client;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+
+import java.util.Map;
+
+@SpringBootApplication
+public class Application implements CommandLineRunner {
+
+    @Autowired
+    private ElasticsearchOperations es;
+
+    @Autowired
+    private BookService bookService;
+
+    public static void main(String args[]) {
+        SpringApplication.run(Application.class, args);
+    }
+
+    @Override
+    public void run(String... args) throws Exception {
+
+        printElasticSearchInfo();
+
+        bookService.save(new Book("1001", "Elasticsearch Basics", "Rambabu Posa", "23-FEB-2017"));
+        bookService.save(new Book("1002", "Apache Lucene Basics", "Rambabu Posa", "13-MAR-2017"));
+        bookService.save(new Book("1003", "Apache Solr Basics", "Rambabu Posa", "21-MAR-2017"));
+
+        //fuzzey search
+        Page<Book> books = bookService.findByAuthor("Rambabu", new PageRequest(0, 10));
+
+        //List<Book> books = bookService.findByTitle("Elasticsearch Basics");
+
+        books.forEach(x -> System.out.println(x));
+
+
+    }
+
+    //useful for debug, print elastic search details
+    private void printElasticSearchInfo() {
+
+        System.out.println("--ElasticSearch--");
+        Client client = es.getClient();
+        Map<String, String> asMap = client.settings().getAsMap();
+
+        asMap.forEach((k, v) -> {
+            System.out.println(k + " = " + v);
+        });
+        System.out.println("--ElasticSearch--");
+    }
+
+}
+Copy
+Output
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::        (v1.5.1.RELEASE)
+
+//...
+--ElasticSearch--
+client.type = transport
+cluster.name = mkyong-cluster
+name = Baal
+network.server = false
+node.client = true
+transport.ping_schedule = 5s
+--ElasticSearch--
+Book{id='1001', title='Elasticsearch Basics', author='Rambabu Posa', releaseDate='23-FEB-2017'}
+Book{id='1002', title='Apache Lucene Basics', author='Rambabu Posa', releaseDate='13-MAR-2017'}
+Book{id='1003', title='Apache Solr Basics', author='Rambabu Posa', releaseDate='21-MAR-2017'}
+//...
+Copy
+When we run the application, our data is stored at ${ELASTICSEARCH_HOME}\data\mkyong-cluster.
+
+5.3 Maven package and run it.
+
+Terminal
+$ mvn package
+$ java -jar target/springboot-springdata-elasticsearch-example-1.0.jar
+Copy
+5.4 Test with cURL tool.
+
+Terminal
+C:\curl-7.53.1\bin>curl "http://localhost:9200/mkyong/books/_search?pretty=true"
+{
+  "took" : 3,
+  "timed_out" : false,
+  "_shards" : {
+    "total" : 5,
+    "successful" : 5,
+    "failed" : 0
+  },
+  "hits" : {
+    "total" : 3,
+    "max_score" : 1.0,
+    "hits" : [ {
+      "_index" : "mkyong",
+      "_type" : "books",
+      "_id" : "1001",
+      "_score" : 1.0,
+      "_source" : {
+        "id" : "1001",
+        "title" : "Elasticsearch Basics",
+        "author" : "Rambabu Posa",
+        "releaseDate" : "23-FEB-2017"
+      }
+    }, {
+      "_index" : "mkyong",
+      "_type" : "books",
+      "_id" : "1002",
+      "_score" : 1.0,
+      "_source" : {
+        "id" : "1002",
+        "title" : "Apache Lucene Basics",
+        "author" : "Rambabu Posa",
+        "releaseDate" : "13-MAR-2017"
+      }
+    }, {
+      "_index" : "mkyong",
+      "_type" : "books",
+      "_id" : "1003",
+      "_score" : 1.0,
+      "_source" : {
+        "id" : "1003",
+        "title" : "Apache Solr Basics",
+        "author" : "Rambabu Posa",
+        "releaseDate" : "21-MAR-2017"
+      }
+    } ]
+  }
+}
+Copy
+Terminal
+C:\curl-7.53.1\bin>curl "http://localhost:9200/mkyong/books/_search?q=_id:1003&pretty=true"
+{
+  "took" : 3,
+  "timed_out" : false,
+  "_shards" : {
+    "total" : 5,
+    "successful" : 5,
+    "failed" : 0
+  },
+  "hits" : {
+    "total" : 1,
+    "max_score" : 1.0,
+    "hits" : [ {
+      "_index" : "mkyong",
+      "_type" : "books",
+      "_id" : "1003",
+      "_score" : 1.0,
+      "_source" : {
+        "id" : "1003",
+        "title" : "Apache Solr Basics",
+        "author" : "Rambabu Posa",
+        "releaseDate" : "21-MAR-2017"
+      }
+    } ]
+  }
+}
+

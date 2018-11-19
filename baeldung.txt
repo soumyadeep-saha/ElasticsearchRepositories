@@ -1,0 +1,159 @@
+https://www.baeldung.com/spring-data-elasticsearch-tutorial
+
+The example used in this article is available as a sample project in GitHub
+https://github.com/eugenp/tutorials/tree/master/persistence-modules/spring-data-elasticsearch
+
+<<<<Introduction to Spring Data Elasticsearch>>>>
+
+If you have a few years of experience in the Java ecosystem, and you're interested in sharing that experience with the community (and getting paid for your work of course), have a look at the "Write for Us" page. Cheers. Eugen
+
+
+1. Overview
+In this article we’ll explore the basics of Spring Data Elasticsearch in a code-focused, practical manner.
+
+We’ll show how to index, search, and query Elasticsearch in a Spring application using Spring Data – a Spring module for interaction with a popular open-source, Lucene-based search engine.
+
+While Elasticsearch is schemaless, it can use mappings in order to tell the type of a field. When a document is indexed, its fields are processed according to their types. For example, a text field will be tokenized and filtered according to mapping rules. You could also create filters and tokenizers of your own.
+
+2. Spring Data
+Spring Data helps avoid boilerplate code. For example, if we define a repository interface that extends the ElasticsearchRepository interface provided by Spring Data Elasticsearch, CRUD operations for the corresponding document class will be made available by default.
+
+Additionally, simply by declaring methods with names in a prescribed format, method implementations are generated for you – there is no need to write an implementation of the repository interface.
+
+You can read more about Spring Data here.
+
+2.1. Maven Dependency
+Spring Data Elasticsearch provides a Java API for the search engine. In order to use it we need to add a new dependency to the pom.xml:
+
+<dependency>
+    <groupId>org.springframework.data</groupId>
+    <artifactId>spring-data-elasticsearch</artifactId>
+    <version>3.0.8.RELEASE</version>
+</dependency>
+2.2. Defining Repository Interfaces
+Next we need to extend one of the provided repository interfaces, replacing the generic types with our actual document and primary key types.
+
+Notice that ElasticsearchRepository extends PagingAndSortingRepository, which provides built-in support for pagination and sorting.
+
+In our example, we will use the paging feature in our custom search method:
+
+public interface ArticleRepository extends ElasticsearchRepository<Article, String> {
+ 
+    Page<Article> findByAuthorsName(String name, Pageable pageable);
+ 
+    @Query("{\"bool\": {\"must\": [{\"match\": {\"authors.name\": \"?0\"}}]}}")
+    Page<Article> findByAuthorsNameUsingCustomQuery(String name, Pageable pageable);
+}
+Notice that we added two custom methods. With the findByAuthorsName method, the repository proxy will create an implementation based on the method name. The resolution algorithm will determine that it needs to access the authors property and then search the name property of each item.
+
+The second method, findByAuthorsNameUsingCustomQuery, uses an Elasticsearch boolean query, defined using the @Query annotation, which requires strict matching between the author’s name and the provided name argument.
+
+2.3. Java Configuration
+Let’s now explore the Spring configuration of our persistence layer here:
+
+@Configuration
+@EnableElasticsearchRepositories(basePackages = "com.baeldung.spring.data.es.repository")
+@ComponentScan(basePackages = { "com.baeldung.spring.data.es.service" })
+public class Config {
+ 
+    @Value("${elasticsearch.home:/usr/local/Cellar/elasticsearch/5.6.0}")
+    private String elasticsearchHome;
+ 
+    @Value("${elasticsearch.cluster.name:elasticsearch}")
+    private String clusterName;
+ 
+    @Bean
+    public Client client() {
+        Settings elasticsearchSettings = Settings.builder()
+          .put("client.transport.sniff", true)
+          .put("path.home", elasticsearchHome)
+          .put("cluster.name", clusterName).build();
+        TransportClient client = new PreBuiltTransportClient(elasticsearchSettings);
+        client.addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName("127.0.0.1"), 9300));
+        return client;
+    }
+ 
+    @Bean
+    public ElasticsearchOperations elasticsearchTemplate() {
+        return new ElasticsearchTemplate(client());
+    }
+}
+Notice that we’re using a standard Spring enable-style annotation – @EnableElasticsearchRepositories – to scan the provided package for Spring Data repositories.
+
+We’re also defining a simple Transport Client:
+
+We enable sniffing feature for our client using “client.transport.sniff”
+We also provide Elasticsearch installation directory using “path.home”
+If cluster name is not “elasticsearch”, we need to provide it using “cluster.name”
+Finally – we’re also setting up an ElasticsearchOperations bean – elasticsearchTemplate – as our client to work against the Elasticsearch server.
+
+3. Mappings
+Let’s now define our first entity – a document called Article with a String id:
+
+@Document(indexName = "blog", type = "article")
+public class Article {
+ 
+    @Id
+    private String id;
+     
+    private String title;
+     
+    @Field(type = FieldType.Nested, includeInParent = true)
+    private List<Author> authors;
+     
+    // standard getters and setters
+}
+Note that in the @Document annotation, we indicate that instances of this class should be stored in Elasticsearch in an index called “blog“, and with a document type of “article“. Documents with many different types can be stored in the same index.
+
+Also notice that the authors field is marked as FieldType.Nested. This allows us to define the Author class separately, but have the individual instances of author embedded in an Article document when it is indexed in Elasticsearch.
+
+4. Indexing Documents
+Spring Data Elasticsearch generally auto-creates indexes based on the entities in the project.
+
+However, you can also create an index programmatically, via the client template:
+
+1
+elasticsearchTemplate.createIndex(Article.class);
+After the index is available, we can add a document to the index.
+
+Let’s have a quick look at an example – indexing an article with two authors:
+
+Article article = new Article("Spring Data Elasticsearch");
+article.setAuthors(asList(new Author("John Smith"), new Author("John Doe")));
+articleService.save(article);
+5. Querying
+5.1. Method Name-Based Query
+The repository class we defined earlier had a findByAuthorsName method – which we can use for finding articles by author name:
+
+String nameToFind = "John Smith";
+Page<Article> articleByAuthorName
+  = articleService.findByAuthorName(nameToFind, PageRequest.of(0, 10));
+By calling findByAuthorName with a PageRequest object, we obtain the first page of results (page numbering is zero-based), with that page containing at most 10 articles.
+
+5.2. A Custom Query
+There are a couple of ways to define custom queries for Spring Data Elasticsearch repositories. One way is to use the @Query annotation, as demonstrated in section 2.2.
+
+Another option is to use a builder for custom query creation.
+
+For example, we could search for articles that have the word “data” in the title by building a query with the NativeSearchQueryBuilder:
+
+SearchQuery searchQuery = new NativeSearchQueryBuilder()
+  .withFilter(regexpQuery("title", ".*data.*"))
+  .build();
+List<Article> articles = elasticsearchTemplate.queryForList(searchQuery, Article.class);
+6. Updating and Deleting
+In order to update or delete a document, we first need to retrieve that document.
+
+String articleTitle = "Spring Data Elasticsearch";
+SearchQuery searchQuery = new NativeSearchQueryBuilder()
+  .withQuery(matchQuery("title", articleTitle).minimumShouldMatch("75%"))
+  .build();
+ 
+List<Article> articles = elasticsearchTemplate.queryForList(searchQuery, Article.class);
+Now, to update the title of the article – we can modify the document, and use the save API:
+
+article.setTitle("Getting started with Search Engines");
+articleService.save(article);
+As you may have guessed, in order to delete a document you can use the delete method:
+
+articleService.delete(articles.get(0));
