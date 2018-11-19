@@ -1,0 +1,6 @@
+package com.elasticsearch.soumyadeep;
+
+@Document(indexName = "elastic_sample", type = "movie")
+public class Movie {
+
+}

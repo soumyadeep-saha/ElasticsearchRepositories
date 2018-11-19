@@ -1,0 +1,4 @@
+GitRepositoriesView.GitDirectories=D\:\\workspace-self\\elasticsearch\\ItemStore\\.git;D\:\\workspace-self\\elasticsearch\\spring-data-elasticsearch-sample\\.git;
+GitRepositoriesView.GitDirectories.relative=ItemStore\\.git;spring-data-elasticsearch-sample\\.git;
+core_autoIgnoreDerivedResources=false
+eclipse.preferences.version=1

@@ -1,0 +1,25 @@
+package com.elasticsearch.soumyadeep;
+
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class MovieService {
+
+    @Autowired
+    private MovieRepository elasticsearchTemplate;
+
+    public List < Movie >  getByName(String name) {
+        return elasticsearchTemplate.findByName(name);
+    }
+
+    public List < Movie >  getByRatingInterval(Double beginning, Double end) {
+        return elasticsearchTemplate.findByRatingBetween(beginning, end);
+    }
+
+    public void addMovie(Movie movie) {
+    	elasticsearchTemplate.save(movie);
+    }
+}
